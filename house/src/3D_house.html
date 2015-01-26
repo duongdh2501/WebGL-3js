@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <title>obj tester</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+    <script type="text/javascript" src="splitter/jquery.js"></script>
+    <script type="text/javascript" src="splitter/splitter.js"></script>
+    <script type="text/javascript" src="splitter/splitter-152.js"></script>
+
+    <style>
+        body
+        {
+            margin: 0;			/* Remove body margin/padding */
+            padding: 0;
+            overflow: hidden;	/* Remove scroll bars on browser window */
+            font-family: monospace;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 20px;
+
+        }
+
+        /*#canvas {*/
+            /*background-color: #000;*/
+            /*width: 640px;*/
+            /*height: 360px;*/
+            /*position: static;*/
+        /*}*/
+
+
+    </style>
+
+</head>
+
+<body>
+<script src="build/three.min.js"></script>
+<script src="controls/OrbitControls.js"></script>
+
+<script>
+    var container;
+
+    var camera, scene;
+    var canvasRenderer, webglRenderer;
+
+    var mesh, zmesh, geometry;
+
+    var windowHalfX = window.innerWidth / 2;
+    var windowHalfY = window.innerHeight / 2;
+
+    var scene_width = window.innerWidth,
+        scene_height = window.innerHeight;
+//    var scene_width = 640,
+//        scene_height = 360;
+
+    var meshes = [];
+    var controls;
+
+    var plane, projector;
+    var mouse = new THREE.Vector2(),
+        offset = new THREE.Vector3(),
+        INTERSECTED, SELECTED;
+
+    var text;
+
+
+    init();
+    animate();
+
+    function init() {
+
+//        container = document.getElementById('canvas');
+        container = document.createElement("div");
+        document.body.appendChild(container);
+
+        //SETUP CAMERA
+        camera = new THREE.PerspectiveCamera(75, scene_width / scene_height, 1, 100000);
+        camera.position.set(100 , 200 , 220);
+
+        //CONTROLS
+        controls = new THREE.OrbitControls( camera );
+        controls.addEventListener( 'change', render );
+
+        //CREATE SCENE
+        scene = new THREE.Scene();
+
+        // LIGHTS
+        var ambient = new THREE.AmbientLight(0x666666);
+        scene.add(ambient);
+
+        var directionalLight = new THREE.DirectionalLight(0xffeedd);
+        directionalLight.position.set(0, 70, 100).normalize();
+        scene.add(directionalLight);
+
+        //SKYBOX
+        var materialArray = [];
+        materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'textures/skybox/px.jpg' ) }));
+        materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'textures/skybox/nx.jpg' ) }));
+        materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'textures/skybox/py.jpg' ) }));
+        materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'textures/skybox/ny.jpg' ) }));
+        materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'textures/skybox/pz.jpg' ) }));
+        materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'textures/skybox/nz.jpg' ) }));
+        for (var i = 0; i < 6; i++)
+            materialArray[i].side = THREE.BackSide;
+        var skyboxMaterial = new THREE.MeshFaceMaterial( materialArray );
+        var skyboxGeom = new THREE.CubeGeometry( 50000, 50000, 50000, 1, 1, 1 );
+        var skybox = new THREE.Mesh( skyboxGeom, skyboxMaterial );
+        scene.add( skybox );
+
+        // RENDERER
+        webglRenderer = new THREE.WebGLRenderer();
+        webglRenderer.setSize(scene_width , scene_height);
+        webglRenderer.domElement.style.position = "relative";
+        //SET BACKGROUND COLOR
+        webglRenderer.setClearColor( 0xCCffff, 1);
+        container.appendChild(webglRenderer.domElement);
+
+        //LOADER
+        var loader = new THREE.JSONLoader(), callbackKey = function(geometry) {createScene(geometry,  0, 0, 0, 0.7, "textures/px.jpg","horse")};
+        loader.load("models/horse.js", callbackKey);
+
+//        loader = new THREE.JSONLoader(), callbackKey = function(geometry) {createScene(geometry,  50, 0, 0, 0.7, "textures/px.jpg","horse1")};
+//        loader.load("models/horse.js", callbackKey);
+
+        //INNER TEXT
+        var text2 = document.createElement('div');
+        text2.style.position = 'absolute';
+        text2.style.zIndex = 1;    // if you still don't see the label, try uncommenting this
+        text2.style.width = 100;
+        text2.style.height = 100;
+//        text2.style.backgroundColor = "blue";
+        text2.innerHTML = "Test!";
+        text2.style.top = 10 + 'px';
+        text2.style.left = 10 + 'px';
+        document.body.appendChild(text2);
+
+        //DRAGGABLE and SELECTED
+        plane = new THREE.Mesh( new THREE.PlaneGeometry( 2000, 2000, 8, 8 ), new THREE.MeshBasicMaterial( { color: 0x000000, opacity: 0.25, transparent: true, wireframe: true } ) );
+        plane.visible = false;
+        scene.add( plane );
+
+        projector = new THREE.Projector();
+
+        window.addEventListener('resize', onWindowResize, false);
+        webglRenderer.domElement.addEventListener( 'mousemove', onDocumentMouseMove, false );
+        webglRenderer.domElement.addEventListener( 'mousedown', onDocumentMouseDown, false );
+        webglRenderer.domElement.addEventListener( 'mouseup', onDocumentMouseUp, false );
+    }
+
+    //LOADER's function
+    function createScene(geometry, x, y, z, scale, tmap, name) {
+        zmesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture(tmap)}));
+        zmesh.position.set(x, y, z);
+        zmesh.scale.set(scale, scale, scale);
+        meshes.push(zmesh);
+        meshes.name = name;
+        scene.add(zmesh);
+    }
+
+    function onWindowResize() {
+
+        windowHalfX = scene_width / 2;
+        windowHalfY = scene_height / 2;
+
+        camera.aspect = scene_width / scene_height;
+        camera.updateProjectionMatrix();
+
+        webglRenderer.setSize(scene_width, scene_height);
+    }
+
+    function onDocumentMouseMove( event ) {
+
+        event.preventDefault();
+
+        mouse.x = ( event.clientX / scene_width ) * 2 - 1;
+        mouse.y = - ( event.clientY / scene_height ) * 2 + 1;
+
+        //
+
+        var vector = new THREE.Vector3( mouse.x, mouse.y, 0.5 );
+        projector.unprojectVector( vector, camera );
+
+        var raycaster = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
+
+
+        if ( SELECTED ) {
+
+            var intersects = raycaster.intersectObject( plane );
+//            SELECTED.position.copy( intersects[ 0 ].point.sub( offset ) );//Draggable objects
+            return;
+
+        }
+
+
+        var intersects = raycaster.intersectObjects( meshes );
+
+        if ( intersects.length > 0 ) {
+
+            if ( INTERSECTED != intersects[ 0 ].object ) {
+
+                if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+
+                INTERSECTED = intersects[ 0 ].object;
+                INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
+
+                plane.position.copy( INTERSECTED.position );
+                plane.lookAt( camera.position );
+
+            }
+
+            container.style.cursor = 'pointer';
+
+        } else {
+
+            if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+
+            INTERSECTED = null;
+
+            container.style.cursor = 'auto';
+
+        }
+
+    }
+
+    function onDocumentMouseDown( event ) {
+
+        event.preventDefault();
+
+        var vector = new THREE.Vector3( mouse.x, mouse.y, 0.5 );
+        projector.unprojectVector( vector, camera );
+
+        var raycaster = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
+
+        var intersects = raycaster.intersectObjects( meshes );
+
+        if ( intersects.length > 0 ) {
+
+            controls.enabled = true;
+
+            SELECTED = intersects[ 0 ].object;
+//            var intersects = raycaster.intersectObject( plane ); //Draggable objects
+//            offset.copy( intersects[ 0 ].point ).sub( plane.position );
+
+
+            if (SELECTED == meshes[0]){
+                    text = document.createElement('div');
+                    text.style.position = 'absolute';
+                    text.style.zIndex = 1;    // if you still don't see the label, try uncommenting this
+                    text.style.width = 100;
+                    text.style.height = 100;
+                    text.innerHTML = "horse!";
+                    text.style.top = 30 + 'px';
+                    text.style.left = 10 + 'px';
+                    document.body.appendChild(text);
+                }
+
+//            var object1 = scene.getObjectByName("horse");
+//            var object2 = scene.getObjectByName("horse1");
+//            for (var i=0 ; i++ ; i<meshes.length){
+//                if (SELECTED == meshes[i] && meshes[i] == object1){
+//                    text = document.createElement('div');
+//                    text.style.position = 'absolute';
+//                    text.style.zIndex = 1;    // if you still don't see the label, try uncommenting this
+//                    text.style.width = 100;
+//                    text.style.height = 100;
+//                    text.innerHTML = "horse!";
+//                    text.style.top = 30 + 'px';
+//                    text.style.left = 10 + 'px';
+//                    document.body.appendChild(text);
+//                }
+//                if (SELECTED == meshes[i] && meshes[i] == object2){
+//                    text = document.createElement('div');
+//                    text.style.position = 'absolute';
+//                    text.style.zIndex = 1;    // if you still don't see the label, try uncommenting this
+//                    text.style.width = 100;
+//                    text.style.height = 100;
+//                    text.innerHTML = "horse2!";
+//                    text.style.top = 30 + 'px';
+//                    text.style.left = 10 + 'px';
+//                    document.body.appendChild(text);
+//                }
+//            }
+
+
+            container.style.cursor = 'move';
+
+        }
+
+    }
+
+    function onDocumentMouseUp( event ) {
+
+        event.preventDefault();
+
+        controls.enabled = true;
+
+        if ( INTERSECTED ) {
+              text.innerHTML = "";
+//            plane.position.copy( INTERSECTED.position );
+
+            SELECTED = null;
+
+        }
+
+        container.style.cursor = 'auto';
+
+    }
+
+    function animate() {
+//        for(var i = 0; i < meshes.length; i++){
+//            meshes[i].rotation.y += .01;
+//        }
+        requestAnimationFrame(animate);
+        render();
+    }
+
+    function render() {
+//        camera.lookAt(scene.position);
+        webglRenderer.render(scene, camera);
+    }
+</script>
+
+<!--<div id = "canvas"> 123 123 123 </div>-->
+</body>
+</html>
